@@ -62,3 +62,32 @@ for _, row in X_result.iterrows():
 
 st.subheader("🌍 군집 결과 지도")
 st_folium(m, width=700, height=500)
+
+
+# 각 점 찍기
+for _, row in X_result.iterrows():
+    folium.CircleMarker(
+        location=[row[lat_col], row[lon_col]],
+        radius=5,
+        color=colors[int(row["Cluster"]) % len(colors)],
+        fill=True,
+        fill_opacity=0.7,
+        popup=f"Cluster {row['Cluster']}"
+    ).add_to(m)
+
+# 🔵 클러스터 영역 표시 (불투명 원)
+for cluster_id in sorted(X_result["Cluster"].unique()):
+    cluster_data = X_result[X_result["Cluster"] == cluster_id]
+    center_lat = cluster_data[lat_col].mean()
+    center_lon = cluster_data[lon_col].mean()
+
+    folium.Circle(
+        location=[center_lat, center_lon],
+        radius=500,  # 적절히 조절 가능
+        color=colors[cluster_id % len(colors)],
+        fill=True,
+        fill_color=colors[cluster_id % len(colors)],
+        fill_opacity=0.2,
+        popup=f"Cluster {cluster_id} 중심"
+    ).add_to(m)
+
