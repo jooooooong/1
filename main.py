@@ -75,4 +75,6 @@ for _, row in df_vis.iterrows():
     ).add_to(marker_cluster)
 
 st_folium(m, width=700)
+pip install streamlit folium streamlit-folium scikit-learn pandas plotly
+streamlit run app.py
 
