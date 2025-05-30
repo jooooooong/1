@@ -1,80 +1,64 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 import folium
-from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 
-# 데이터 로드
+st.title("📍 배송 위치 자동 군집 분석 (Folium 지도 시각화)")
+
+# 데이터 불러오기
 @st.cache_data
 def load_data():
-    return pd.read_csv("Delivery (1).csv")
+    return pd.read_csv("Delivery.csv")
 
 df = load_data()
+st.subheader("📄 데이터 미리보기")
+st.dataframe(df)
 
-st.title("📦 배송 클러스터링 & 지도 시각화")
-
-# 변수 고정: 위도/경도
+# 위치 컬럼 지정
 lat_col = "Latitude"
 lon_col = "Longitude"
 
-# 수치형 변수 선택
-numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-selected_cols = st.multiselect("군집에 사용할 변수 선택", options=numeric_cols, default=["Latitude", "Longitude"])
-
-if len(selected_cols) < 2:
-    st.warning("최소 2개 이상의 수치형 변수를 선택해주세요.")
+if lat_col not in df.columns or lon_col not in df.columns:
+    st.error("위치 정보가 누락되었습니다 (Latitude / Longitude 필요).")
     st.stop()
 
-# 클러스터 수 선택
-k = st.slider("클러스터 수 선택 (K)", 2, 10, 3)
+# 군집 수 조절
+st.sidebar.header("⚙️ 군집 분석 설정")
+n_clusters = st.sidebar.slider("군집 수 (K)", min_value=2, max_value=10, value=3)
 
-# 군집 수행
-X = df[selected_cols].dropna()
+# 데이터 전처리
+X = df[[lat_col, lon_col]].dropna()
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
+# 군집 분석
+kmeans = KMeans(n_clusters=n_clusters, random_state=42)
 labels = kmeans.fit_predict(X_scaled)
+X_result = df.loc[X.index].copy()
+X_result["Cluster"] = labels
 
-# PCA (2차원 축소)
-pca = PCA(n_components=2)
-X_pca = pca.fit_transform(X_scaled)
+# 중심 위치
+center_lat = X_result[lat_col].mean()
+center_lon = X_result[lon_col].mean()
 
-df_vis = df.loc[X.index].copy()
-df_vis["Cluster"] = labels
-df_vis["PCA1"] = X_pca[:, 0]
-df_vis["PCA2"] = X_pca[:, 1]
+# Folium 지도 생성
+m = folium.Map(location=[center_lat, center_lon], zoom_start=11)
+colors = [
+    "red", "blue", "green", "purple", "orange", "darkred", 
+    "lightblue", "pink", "gray", "cadetblue"
+]
 
-# Plotly 시각화
-st.subheader("📊 PCA 기반 군집 시각화")
-fig = px.scatter(df_vis, x="PCA1", y="PCA2", color=df_vis["Cluster"].astype(str),
-                 title="K-Means 클러스터링 결과 (PCA 2D)",
-                 color_discrete_sequence=px.colors.qualitative.Set1)
-st.plotly_chart(fig, use_container_width=True)
-
-# 지도 시각화
-st.subheader("🗺️ 지도 기반 클러스터 시각화")
-map_center = [df_vis[lat_col].mean(), df_vis[lon_col].mean()]
-m = folium.Map(location=map_center, zoom_start=11)
-marker_cluster = MarkerCluster().add_to(m)
-
-colors = ['red', 'blue', 'green', 'purple', 'orange', 'darkred', 'lightblue', 'pink', 'gray', 'black']
-
-for _, row in df_vis.iterrows():
+for _, row in X_result.iterrows():
     folium.CircleMarker(
         location=[row[lat_col], row[lon_col]],
         radius=5,
-        color=colors[row['Cluster'] % len(colors)],
+        color=colors[int(row["Cluster"]) % len(colors)],
         fill=True,
         fill_opacity=0.7,
-        popup=f"Cluster: {row['Cluster']}<br>Lat: {row[lat_col]}<br>Lon: {row[lon_col]}"
-    ).add_to(marker_cluster)
+        popup=f"Cluster {row['Cluster']}"
+    ).add_to(m)
 
-st_folium(m, width=700)
-pip install streamlit folium streamlit-folium scikit-learn pandas plotly
-streamlit run app.py
-
+st.subheader("🌍 군집 결과 지도")
+st_folium(m, width=700, height=500)
